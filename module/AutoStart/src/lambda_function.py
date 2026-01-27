@@ -160,18 +160,14 @@ def process_main_logic(event, context):
     # Forward to Jenkins (if needed and supported by original payload)
     if bastion_id in instances_to_start:
          try:
-            print("Waiting for Bastion to be running to trigger Jenkins...")
-            waiter = ec2.get_waiter('instance_running')
-            waiter.wait(InstanceIds=[bastion_id], WaiterConfig={'Delay': 5, 'MaxAttempts': 12})
-            
             jenkins_url = "https://jenkins.fuec.site/github-webhook/"
             print(f"Forwarding trigger to Jenkins: {jenkins_url}")
-            time.sleep(20) # Wait for network init
-
+            
             # Use the actual event type for Jenkins (push or pull_request)
             headers_out = {
                 'Content-Type': 'application/json',
-                'X-GitHub-Event': gh_event 
+                'X-GitHub-Event': gh_event,
+                'User-Agent': 'AWS-Lambda-AutoStart'
             }
             
             # Use original body string if available, else re-dump body object
@@ -183,8 +179,16 @@ def process_main_logic(event, context):
                 headers=headers_out,
                 method='POST'
             )
-            urllib.request.urlopen(req, timeout=15)
+            
+            # Fail Fast: If Jenkins is down, this raises URLError/HTTPError
+            # The Exception will bubble up, causing Lambda to fail.
+            # SQS will then retry this message after VisibilityTimeout (60s).
+            with urllib.request.urlopen(req, timeout=10) as response:
+                print(f"Jenkins Triggered Successfully: {response.status}")
+
          except Exception as e:
             print(f"Error forwarding to Jenkins: {e}")
+            print("Raising exception to trigger SQS Retry...")
+            raise e # CRITICAL: This ensures SQS keeps the message
 
     return {'statusCode': 200, 'body': json.dumps('Environment startup initiated.')}

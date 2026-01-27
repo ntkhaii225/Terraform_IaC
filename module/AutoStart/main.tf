@@ -140,10 +140,10 @@ resource "aws_sqs_queue" "autostart_dlq" {
 
 resource "aws_sqs_queue" "autostart_queue" {
   name                       = "${var.project_name}-${var.environment}-autostart-queue"
-  visibility_timeout_seconds = 600 # 10 minutes (long enough for EC2 start + Jenkins wait)
+  visibility_timeout_seconds = 60 # Retry every 1 minute
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.autostart_dlq.arn
-    maxReceiveCount     = 3
+    maxReceiveCount     = 10 # Allow ~10 minutes of retries
   })
 }
 
