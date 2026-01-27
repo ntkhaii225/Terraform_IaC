@@ -1,0 +1,24 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+
+# Keys and Secrets
+*.pem
+*.key
+id_rsa
+id_ed25519
+*.pub
+
+# Python/Lambda
+__pycache__/
+*.zip
+
+# IDEs
+.vscode/
+.idea/
+
+# Logs and Temp
+*.log
+*.tmp
