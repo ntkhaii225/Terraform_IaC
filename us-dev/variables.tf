@@ -54,12 +54,6 @@ variable "availability_zone_2" {
   type        = string
 }
 
-# --- Security Configuration ---
-variable "allowed_ssh_cidr" {
-  description = "CIDR blocks allowed to SSH to Bastion Host"
-  type        = list(string)
-}
-
 # --- Bastion Configuration ---
 variable "bastion_instance_type" {
   description = "EC2 instance type for Bastion"

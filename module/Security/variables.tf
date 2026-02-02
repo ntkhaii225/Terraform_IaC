@@ -20,4 +20,5 @@ variable "vpc_id" {
 variable "allowed_ssh_cidr" {
   description = "CIDR blocks allowed to SSH to Bastion Host (e.g., your IP)"
   type        = list(string)
+  default     = ["0.0.0.0/0"]
 }

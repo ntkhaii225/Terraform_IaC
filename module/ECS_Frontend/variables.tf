@@ -47,6 +47,11 @@ variable "instance_type" {
   default     = "t3.small"
 }
 
+variable "key_name" {
+  description = "SSH key name for EC2 instance"
+  type        = string
+}
+
 variable "asg_min_size" {
   description = "Minimum number of EC2 instances in ASG"
   type        = number

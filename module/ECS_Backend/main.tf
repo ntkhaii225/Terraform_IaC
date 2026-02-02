@@ -163,6 +163,10 @@ resource "aws_instance" "ecs_backend" {
               echo ECS_CLUSTER=${aws_ecs_cluster.backend.name} >> /etc/ecs/ecs.config
               echo ECS_ENABLE_CONTAINER_METADATA=true >> /etc/ecs/ecs.config
               
+              # Enable Docker & ECS agent to start on boot
+              systemctl enable --now docker
+              systemctl enable --now ecs
+              
               # Log success
               echo "ECS Configuration Complete" >> /var/log/user-data.log
               EOF

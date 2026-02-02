@@ -151,11 +151,16 @@ resource "aws_instance" "ecs_frontend" {
   subnet_id              = var.private_subnet_ids[0]
   vpc_security_group_ids = [var.ecs_security_group_id]
   iam_instance_profile   = aws_iam_instance_profile.ecs.name
+  key_name               = var.key_name
 
   user_data = base64encode(<<-EOF
               #!/bin/bash
               echo ECS_CLUSTER=${aws_ecs_cluster.frontend.name} >> /etc/ecs/ecs.config
               echo ECS_ENABLE_CONTAINER_METADATA=true >> /etc/ecs/ecs.config
+
+              # Enable Docker & ECS agent to start on boot
+              systemctl enable --now docker
+              systemctl enable --now ecs
               EOF
   )
 

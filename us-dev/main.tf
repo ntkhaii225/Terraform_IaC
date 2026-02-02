@@ -30,10 +30,9 @@ module "networking" {
 module "security" {
   source = "../module/Security"
 
-  project_name     = var.project_name
-  environment      = var.environment
-  vpc_id           = module.networking.vpc_id
-  allowed_ssh_cidr = var.allowed_ssh_cidr
+  project_name = var.project_name
+  environment  = var.environment
+  vpc_id       = module.networking.vpc_id
 }
 
 # -----------------------------------------------------------------------------
@@ -113,6 +112,7 @@ module "ecs_frontend" {
   asg_min_size         = var.frontend_asg_min_size
   asg_max_size         = var.frontend_asg_max_size
   asg_desired_capacity = var.frontend_asg_desired_capacity
+  key_name             = module.bastion.key_name
 
   # Container Configuration
   frontend_image          = var.frontend_image
