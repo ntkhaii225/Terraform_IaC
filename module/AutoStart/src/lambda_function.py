@@ -106,21 +106,31 @@ def validate_github_event(headers_norm, body_obj):
 
 def process_main_logic(event, context):
     ec2 = boto3.client('ec2')
+    ecs = boto3.client('ecs')
 
     bastion_id = os.environ['BASTION_INSTANCE_ID']
     nat_id = os.environ['NAT_INSTANCE_ID']
-    fe_instance_id = os.environ['FRONTEND_INSTANCE_ID']
-    be_instance_id = os.environ['BACKEND_INSTANCE_ID']
+    
+    # fe_instance_id = os.environ['FRONTEND_INSTANCE_ID']
+    # be_instance_id = os.environ['BACKEND_INSTANCE_ID']
+    fe_cluster = os.environ['FRONTEND_CLUSTER_NAME']
+    fe_service = os.environ['FRONTEND_SERVICE_NAME']
+    be_cluster = os.environ['BACKEND_CLUSTER_NAME']
+    be_service = os.environ['BACKEND_SERVICE_NAME']
 
     # --- STOP Action ---
     if str(event.get("action", "")).upper() == "STOP":
-        all_instances = [bastion_id, nat_id, fe_instance_id, be_instance_id]
-        print(f"ACTION: STOP. Stopping all instances: {all_instances}")
+        # all_instances = [bastion_id, nat_id, fe_instance_id, be_instance_id]
+        # print(f"ACTION: STOP. Stopping all instances: {all_instances}")
+        print("ACTION: STOP. Stopping EC2 instances and ECS services.")
         try:
-            ec2.stop_instances(InstanceIds=all_instances)
-            return {'statusCode': 200, 'body': json.dumps('All instances stopped.')}
+            # ec2.stop_instances(InstanceIds=all_instances)
+            ec2.stop_instances(InstanceIds=[bastion_id, nat_id])
+            ecs.update_service(cluster=fe_cluster, service=fe_service, desiredCount=0)
+            ecs.update_service(cluster=be_cluster, service=be_service, desiredCount=0)
+            return {'statusCode': 200, 'body': json.dumps('Environment stopped.')}
         except Exception as e:
-            print(f"Error stopping instances: {e}")
+            print(f"Error stopping environment: {e}")
             return {'statusCode': 500, 'body': str(e)}
 
     # --- START Action (Strict Checks) ---
@@ -141,21 +151,31 @@ def process_main_logic(event, context):
 
     repo_name = (event.get("repository") or "").upper()
     instances_to_start = [bastion_id, nat_id]
+    
+    start_fe = False
+    start_be = False
 
     if "BE" in repo_name:
-        instances_to_start.append(be_instance_id)
+        # instances_to_start.append(be_instance_id)
+        start_be = True
     elif "FE" in repo_name:
-        instances_to_start.append(fe_instance_id)
+        # instances_to_start.append(fe_instance_id)
+        start_fe = True
     else:
         # ✅ NO FALLBACK START ALL
         print(f"Ignored: repository name not matched (repo={repo_name})")
         return {'statusCode': 200, 'body': 'ignored: unknown repo'}
 
-    print(f"ACTION: START. Starting instances: {instances_to_start}")
+    # print(f"ACTION: START. Starting instances: {instances_to_start}")
+    print(f"ACTION: START. Starting EC2 instances {instances_to_start} and relevant ECS services.")
     try:
         ec2.start_instances(InstanceIds=instances_to_start)
+        if start_fe:
+            ecs.update_service(cluster=fe_cluster, service=fe_service, desiredCount=1)
+        if start_be:
+            ecs.update_service(cluster=be_cluster, service=be_service, desiredCount=1)
     except Exception as e:
-        print(f"Error starting instances: {e}")
+        print(f"Error starting environment: {e}")
 
     # Forward to Jenkins (if needed and supported by original payload)
     if bastion_id in instances_to_start:

@@ -40,7 +40,7 @@ resource "aws_key_pair" "bastion" {
 # Đặt trong Public Subnet để có thể SSH từ internet
 # -----------------------------------------------------------------------------
 resource "aws_instance" "bastion" {
-  ami                         = "ami-0c398cb65a93047f2"
+  ami                         = "ami-0fa77c6a18df84736"
   instance_type               = var.instance_type
   subnet_id                   = var.public_subnet_id
   vpc_security_group_ids      = [var.bastion_security_group_id]

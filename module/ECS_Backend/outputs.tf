@@ -30,22 +30,22 @@ output "service_id" {
 }
 
 # --- EC2 Instance Outputs ---
-output "ecs_instance_id" {
-  description = "ECS EC2 Instance ID"
-  value       = aws_instance.ecs_backend.id
-}
-
-output "ecs_instance_private_ip" {
-  description = "ECS EC2 Instance Private IP"
-  value       = aws_instance.ecs_backend.private_ip
-}
-
+# output "ecs_instance_id" {
+#   description = "ECS EC2 Instance ID"
+#   value       = aws_instance.ecs_backend.id
+# }
+# 
+# output "ecs_instance_private_ip" {
+#   description = "ECS EC2 Instance Private IP"
+#   value       = aws_instance.ecs_backend.private_ip
+# }
+# 
 # --- IAM Outputs ---
-output "ecs_instance_role_arn" {
-  description = "ECS Instance IAM Role ARN"
-  value       = aws_iam_role.ecs_instance_role.arn
-}
-
+# output "ecs_instance_role_arn" {
+#   description = "ECS Instance IAM Role ARN"
+#   value       = aws_iam_role.ecs_instance_role.arn
+# }
+# 
 output "ecs_task_execution_role_arn" {
   description = "ECS Task Execution Role ARN"
   value       = aws_iam_role.ecs_task_execution_role.arn

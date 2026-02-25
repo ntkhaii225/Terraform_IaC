@@ -28,7 +28,7 @@ resource "aws_lb_target_group" "frontend" {
   port                 = 3000
   protocol             = "HTTP"
   vpc_id               = var.vpc_id
-  target_type          = "instance" # For ECS on EC2 with bridge network mode
+  target_type          = "ip" # For Fargate awsvpc network mode
   deregistration_delay = 30
 
   health_check {
@@ -38,6 +38,7 @@ resource "aws_lb_target_group" "frontend" {
     timeout             = 5
     interval            = 10
     path                = var.frontend_health_check_path
+    port                = 3000
     protocol            = "HTTP"
     matcher             = "200-299"
   }
@@ -56,7 +57,7 @@ resource "aws_lb_target_group" "backend" {
   port                 = 8080
   protocol             = "HTTP"
   vpc_id               = var.vpc_id
-  target_type          = "instance" # For ECS on EC2 with bridge network mode
+  target_type          = "ip" # For Fargate awsvpc network mode
   deregistration_delay = 30
 
   health_check {
@@ -66,6 +67,7 @@ resource "aws_lb_target_group" "backend" {
     timeout             = 5
     interval            = 10
     path                = var.backend_health_check_path
+    port                = 8080
     protocol            = "HTTP"
     matcher             = "200-299"
   }

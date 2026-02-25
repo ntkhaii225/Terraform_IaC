@@ -230,8 +230,12 @@ module "autostart" {
   project_name = var.project_name
   environment  = var.environment
 
-  bastion_instance_id  = module.bastion.instance_id
-  nat_instance_id      = module.nat_instance.instance_id
-  frontend_instance_id = module.ecs_frontend.instance_id
-  backend_instance_id  = module.ecs_backend.ecs_instance_id
+  bastion_instance_id = module.bastion.instance_id
+  nat_instance_id     = module.nat_instance.instance_id
+  # frontend_instance_id = module.ecs_frontend.instance_id
+  # backend_instance_id  = module.ecs_backend.ecs_instance_id
+  frontend_cluster_name = module.ecs_frontend.cluster_name
+  frontend_service_name = module.ecs_frontend.service_name
+  backend_cluster_name  = module.ecs_backend.cluster_name
+  backend_service_name  = module.ecs_backend.service_name
 }

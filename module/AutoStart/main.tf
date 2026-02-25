@@ -27,6 +27,8 @@ resource "aws_iam_policy" "lambda_autostart_policy" {
           "ec2:StartInstances",
           "ec2:StopInstances",
           "ec2:DescribeInstances",
+          "ecs:UpdateService",
+          "ecs:DescribeServices",
           "lambda:InvokeFunction"
         ]
         Effect   = "Allow"
@@ -79,11 +81,15 @@ resource "aws_lambda_function" "autostart" {
 
   environment {
     variables = {
-      BASTION_INSTANCE_ID  = var.bastion_instance_id
-      NAT_INSTANCE_ID      = var.nat_instance_id
-      FRONTEND_INSTANCE_ID = var.frontend_instance_id
-      BACKEND_INSTANCE_ID  = var.backend_instance_id
-      SQS_QUEUE_URL        = aws_sqs_queue.autostart_queue.url
+      BASTION_INSTANCE_ID = var.bastion_instance_id
+      NAT_INSTANCE_ID     = var.nat_instance_id
+      # FRONTEND_INSTANCE_ID = var.frontend_instance_id
+      # BACKEND_INSTANCE_ID  = var.backend_instance_id
+      FRONTEND_CLUSTER_NAME = var.frontend_cluster_name
+      FRONTEND_SERVICE_NAME = var.frontend_service_name
+      BACKEND_CLUSTER_NAME  = var.backend_cluster_name
+      BACKEND_SERVICE_NAME  = var.backend_service_name
+      SQS_QUEUE_URL         = aws_sqs_queue.autostart_queue.url
     }
   }
 
