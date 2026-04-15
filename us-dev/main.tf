@@ -25,7 +25,7 @@ module "networking" {
 
 # -----------------------------------------------------------------------------
 # Security Module
-# Creates Security Groups for ALB, ECS, Bastion
+# Creates Security Groups for ALB, ECS/Backend, Bastion
 # -----------------------------------------------------------------------------
 module "security" {
   source = "../module/Security"
@@ -37,7 +37,7 @@ module "security" {
 
 # -----------------------------------------------------------------------------
 # Application Load Balancer Module
-# Creates ALB, Target Groups, Listeners
+# Phục vụ Backend API (Frontend đã chuyển sang S3 + CloudFront)
 # -----------------------------------------------------------------------------
 module "alb" {
   source = "../module/ALB"
@@ -47,11 +47,12 @@ module "alb" {
   vpc_id                = module.networking.vpc_id
   public_subnet_ids     = module.networking.public_subnet_ids
   alb_security_group_id = module.security.alb_security_group_id
+  domain_name           = var.domain_name
 }
 
 # -----------------------------------------------------------------------------
-# Bastion Host Module (Optional)
-# Creates EC2 instance for SSH access to private resources
+# Bastion Host Module
+# EC2 instance cho SSH access vào Private Subnet resources
 # -----------------------------------------------------------------------------
 module "bastion" {
   source = "../module/Bastion"
@@ -65,7 +66,8 @@ module "bastion" {
 }
 
 # -----------------------------------------------------------------------------
-# NAT Instance Module (Cost-effective NAT)
+# NAT Instance Module (Cost-effective NAT thay cho NAT Gateway)
+# Cho phép Private Subnet truy cập Internet
 # -----------------------------------------------------------------------------
 module "nat_instance" {
   source = "../module/NatInstance"
@@ -89,50 +91,8 @@ resource "aws_route" "private_internet_access" {
 }
 
 # -----------------------------------------------------------------------------
-# ECS Frontend Cluster Module
-# Creates ECS cluster, ASG, Task Definition, Service for Frontend
-# -----------------------------------------------------------------------------
-module "ecs_frontend" {
-  source = "../module/ECS_Frontend"
-
-  project_name = var.project_name
-  environment  = var.environment
-  aws_region   = var.aws_region
-
-  # Networking
-  vpc_id                = module.networking.vpc_id
-  private_subnet_ids    = module.networking.private_subnet_ids
-  ecs_security_group_id = module.security.ecs_security_group_id
-
-  # Load Balancer
-  frontend_target_group_arn = module.alb.frontend_target_group_arn
-
-  # EC2 Configuration
-  instance_type        = var.frontend_instance_type
-  asg_min_size         = var.frontend_asg_min_size
-  asg_max_size         = var.frontend_asg_max_size
-  asg_desired_capacity = var.frontend_asg_desired_capacity
-  key_name             = module.bastion.key_name
-
-  # Container Configuration
-  frontend_image          = var.frontend_image
-  frontend_image_tag      = var.frontend_image_tag
-  frontend_container_port = var.frontend_container_port
-  frontend_cpu            = var.frontend_cpu
-  frontend_memory         = var.frontend_memory
-  frontend_desired_count  = var.frontend_desired_count
-
-  # Environment Variables
-
-}
-
-# -----------------------------------------------------------------------------
-# ECS Backend Cluster Module
-# Creates ECS cluster, ASG, Task Definition, Service for Backend
-# -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
 # Database Module
-# Creates RDS MySQL instance
+# Creates RDS MySQL instance in Private Subnet
 # -----------------------------------------------------------------------------
 module "database" {
   source = "../module/Database"
@@ -141,14 +101,11 @@ module "database" {
   environment  = var.environment
   vpc_id       = module.networking.vpc_id
 
-  # Deploy to private subnets
   private_subnet_ids = module.networking.private_subnet_ids
 
-  # Security Groups
   ecs_security_group_id     = module.security.ecs_security_group_id
   bastion_security_group_id = module.security.bastion_security_group_id
 
-  # Database Config
   db_name     = var.mysql_database
   db_username = var.mysql_user
   db_password = var.mysql_password
@@ -164,7 +121,8 @@ resource "random_string" "suffix" {
 }
 
 # -----------------------------------------------------------------------------
-# Storage Module (S3)
+# Storage Module (S3 - Application Data)
+# S3 bucket cho upload/download files (ảnh, tài liệu, etc.)
 # -----------------------------------------------------------------------------
 module "storage" {
   source = "../module/Storage"
@@ -174,55 +132,66 @@ module "storage" {
 }
 
 # -----------------------------------------------------------------------------
-# ECS Backend Cluster Module
-# Creates ECS cluster, ASG, Task Definition, Service for Backend
+# Frontend S3 + CloudFront Module (MỚI)
+# Host React SPA trên S3, phân phối qua CloudFront CDN
+# CloudFront có 2 origins: S3 (frontend) + ALB (/api/*)
 # -----------------------------------------------------------------------------
-module "ecs_backend" {
-  source = "../module/ECS_Backend"
+module "frontend_s3_cloudfront" {
+  source = "../module/Frontend_S3_CloudFront"
+
+  project_name        = var.project_name
+  environment         = var.environment
+  domain_name         = var.domain_name
+  acm_certificate_arn = module.alb.acm_certificate_arn
+  alb_dns_name        = module.alb.alb_dns_name
+  alb_zone_id         = module.alb.alb_zone_id
+  alb_domain_name     = "alb.${var.domain_name}"
+}
+
+# -----------------------------------------------------------------------------
+# Backend EC2 Module (MỚI - Thay thế ECS Backend)
+# EC2 instance chạy .NET Core API trong Private Subnet
+# -----------------------------------------------------------------------------
+module "backend_ec2" {
+  source = "../module/Backend_EC2"
 
   project_name = var.project_name
   environment  = var.environment
   aws_region   = var.aws_region
 
-  # Networking
-  vpc_id                = module.networking.vpc_id
-  private_subnet_ids    = module.networking.private_subnet_ids
-  ecs_security_group_id = module.security.ecs_security_group_id
+  instance_type             = var.backend_instance_type
+  private_subnet_id         = module.networking.private_subnet_ids[0]
+  backend_security_group_id = module.security.ecs_security_group_id
+  key_name                  = module.bastion.key_name
+  backend_port              = var.backend_container_port
 
-  # Load Balancer
-  backend_target_group_arn = module.alb.backend_target_group_arn
-
-  # EC2 Configuration
-  key_name             = module.bastion.key_name # Use Bastion SSH key
-  instance_type        = var.backend_instance_type
-  asg_min_size         = var.backend_asg_min_size
-  asg_max_size         = var.backend_asg_max_size
-  asg_desired_capacity = var.backend_asg_desired_capacity
-
-  # Container Configuration
-  backend_image          = var.backend_image
-  backend_image_tag      = var.backend_image_tag
-  backend_container_port = var.backend_container_port
-  backend_cpu            = var.backend_cpu
-  backend_memory         = var.backend_memory
-  backend_desired_count  = var.backend_desired_count
-
-  # Database Configuration
+  # Database
   mysql_host     = module.database.db_address
   mysql_database = var.mysql_database
   mysql_user     = var.mysql_user
   mysql_password = var.mysql_password
   mysql_port     = module.database.db_port
 
-  s3_bucket_arn  = module.storage.bucket_arn
+  # S3
   s3_bucket_name = module.storage.bucket_id
+  s3_bucket_arn  = module.storage.bucket_arn
 
   aspnetcore_environment = var.aspnetcore_environment
 }
 
 # -----------------------------------------------------------------------------
+# ALB Target Group Attachment
+# Gắn Backend EC2 vào ALB Target Group
+# -----------------------------------------------------------------------------
+resource "aws_lb_target_group_attachment" "backend" {
+  target_group_arn = module.alb.backend_target_group_arn
+  target_id        = module.backend_ec2.instance_id
+  port             = var.backend_container_port
+}
+
+# -----------------------------------------------------------------------------
 # AutoStart Lambda Module
-# Automatically starts instances on push to develop
+# Tự động Start/Stop instances theo lịch và GitHub webhook
 # -----------------------------------------------------------------------------
 module "autostart" {
   source = "../module/AutoStart"
@@ -232,10 +201,5 @@ module "autostart" {
 
   bastion_instance_id = module.bastion.instance_id
   nat_instance_id     = module.nat_instance.instance_id
-  # frontend_instance_id = module.ecs_frontend.instance_id
-  # backend_instance_id  = module.ecs_backend.ecs_instance_id
-  frontend_cluster_name = module.ecs_frontend.cluster_name
-  frontend_service_name = module.ecs_frontend.service_name
-  backend_cluster_name  = module.ecs_backend.cluster_name
-  backend_service_name  = module.ecs_backend.service_name
+  backend_instance_id = module.backend_ec2.instance_id
 }

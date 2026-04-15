@@ -23,14 +23,13 @@ variable "alb_security_group_id" {
   type        = string
 }
 
-variable "frontend_health_check_path" {
-  description = "Health check path for Frontend"
-  type        = string
-  default     = "/"
-}
-
 variable "backend_health_check_path" {
   description = "Health check path for Backend"
   type        = string
   default     = "/api/health"
+}
+
+variable "domain_name" {
+  description = "Domain name for ACM certificate (e.g. fuec.site)"
+  type        = string
 }

@@ -27,8 +27,8 @@ resource "aws_iam_policy" "lambda_autostart_policy" {
           "ec2:StartInstances",
           "ec2:StopInstances",
           "ec2:DescribeInstances",
-          "ecs:UpdateService",
-          "ecs:DescribeServices",
+          "rds:StartDBInstance",
+          "rds:StopDBInstance",
           "lambda:InvokeFunction"
         ]
         Effect   = "Allow"
@@ -83,13 +83,8 @@ resource "aws_lambda_function" "autostart" {
     variables = {
       BASTION_INSTANCE_ID = var.bastion_instance_id
       NAT_INSTANCE_ID     = var.nat_instance_id
-      # FRONTEND_INSTANCE_ID = var.frontend_instance_id
-      # BACKEND_INSTANCE_ID  = var.backend_instance_id
-      FRONTEND_CLUSTER_NAME = var.frontend_cluster_name
-      FRONTEND_SERVICE_NAME = var.frontend_service_name
-      BACKEND_CLUSTER_NAME  = var.backend_cluster_name
-      BACKEND_SERVICE_NAME  = var.backend_service_name
-      SQS_QUEUE_URL         = aws_sqs_queue.autostart_queue.url
+      BACKEND_INSTANCE_ID = var.backend_instance_id
+      SQS_QUEUE_URL       = aws_sqs_queue.autostart_queue.url
     }
   }
 
@@ -146,7 +141,7 @@ resource "aws_sqs_queue" "autostart_dlq" {
 
 resource "aws_sqs_queue" "autostart_queue" {
   name                       = "${var.project_name}-${var.environment}-autostart-queue"
-  visibility_timeout_seconds = 60 # Retry every 1 minute
+  visibility_timeout_seconds = 180 # Must be >= Lambda timeout (120s)
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.autostart_dlq.arn
     maxReceiveCount     = 10 # Allow ~10 minutes of retries

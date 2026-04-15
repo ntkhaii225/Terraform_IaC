@@ -21,43 +21,65 @@ resource "aws_lb" "main" {
 }
 
 # -----------------------------------------------------------------------------
-# Target Group - Frontend (Port 3000)
+# ACM Certificate for HTTPS
 # -----------------------------------------------------------------------------
-resource "aws_lb_target_group" "frontend" {
-  name                 = "${var.project_name}-frontend-tg"
-  port                 = 3000
-  protocol             = "HTTP"
-  vpc_id               = var.vpc_id
-  target_type          = "ip" # For Fargate awsvpc network mode
-  deregistration_delay = 30
-
-  health_check {
-    enabled             = true
-    healthy_threshold   = 2
-    unhealthy_threshold = 3
-    timeout             = 5
-    interval            = 10
-    path                = var.frontend_health_check_path
-    port                = 3000
-    protocol            = "HTTP"
-    matcher             = "200-299"
-  }
+resource "aws_acm_certificate" "main" {
+  domain_name               = var.domain_name
+  subject_alternative_names = ["*.${var.domain_name}"]
+  validation_method         = "DNS"
 
   tags = {
-    Name        = "${var.project_name}-frontend-tg"
+    Name        = "${var.project_name}-certificate"
     Environment = var.environment
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
 # -----------------------------------------------------------------------------
-# Target Group - Backend (Port 5000)
+# Route53 DNS Validation Record
+# -----------------------------------------------------------------------------
+data "aws_route53_zone" "main" {
+  name         = var.domain_name
+  private_zone = false
+}
+
+resource "aws_route53_record" "cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.main.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
+
+  allow_overwrite = true
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 300
+  type            = each.value.type
+  zone_id         = data.aws_route53_zone.main.zone_id
+}
+
+resource "aws_acm_certificate_validation" "main" {
+  certificate_arn         = aws_acm_certificate.main.arn
+  validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
+}
+
+# -----------------------------------------------------------------------------
+# Target Group - Backend Only (Port 8080)
+# target_type = "instance" vì Backend giờ là EC2 (không còn Fargate)
 # -----------------------------------------------------------------------------
 resource "aws_lb_target_group" "backend" {
-  name                 = "${var.project_name}-backend-tg"
+  # Dùng name_prefix thay vì name để Terraform có thể create_before_destroy
+  # Tránh deadlock khi target_type thay đổi (ip → instance buộc phải replace)
+  name_prefix          = "be-tg-"
   port                 = 8080
   protocol             = "HTTP"
   vpc_id               = var.vpc_id
-  target_type          = "ip" # For Fargate awsvpc network mode
+  target_type          = "instance"
   deregistration_delay = 30
 
   health_check {
@@ -76,11 +98,14 @@ resource "aws_lb_target_group" "backend" {
     Name        = "${var.project_name}-backend-tg"
     Environment = var.environment
   }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # -----------------------------------------------------------------------------
-# Listener - HTTP 80
-# Default: Forward đến Frontend
+# Listener - HTTP 80 → Redirect to HTTPS
 # -----------------------------------------------------------------------------
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
@@ -88,8 +113,13 @@ resource "aws_lb_listener" "http" {
   protocol          = "HTTP"
 
   default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend.arn
+    type = "redirect"
+
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
   }
 
   tags = {
@@ -98,24 +128,22 @@ resource "aws_lb_listener" "http" {
 }
 
 # -----------------------------------------------------------------------------
-# Listener Rule - Route /api/* đến Backend
+# Listener - HTTPS 443
+# Default: Forward thẳng tới Backend (không còn Frontend Target Group)
 # -----------------------------------------------------------------------------
-resource "aws_lb_listener_rule" "backend_api" {
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 100
+resource "aws_lb_listener" "https" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09"
+  certificate_arn   = aws_acm_certificate_validation.main.certificate_arn
 
-  action {
+  default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.backend.arn
   }
 
-  condition {
-    path_pattern {
-      values = ["/api/*"]
-    }
-  }
-
   tags = {
-    Name = "${var.project_name}-backend-rule"
+    Name = "${var.project_name}-https-listener"
   }
 }
